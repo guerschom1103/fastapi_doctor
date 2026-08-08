@@ -1,0 +1,40 @@
+[project]
+name = "fastapi-doctor"
+version = "3.0.0"
+description = "Professional generic audit orchestrator for Python/FastAPI projects with advanced analysis capabilities"
+requires-python = ">=3.10"
+dependencies = [
+    "typing-extensions>=4.0.0",
+]
+
+[project.optional-dependencies]
+full = [
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "bandit>=1.7.0",
+    "pip-audit>=2.0.0",
+    "semgrep>=1.0.0",
+    "pytest>=7.0.0",
+    "networkx>=3.0",
+    "graphviz>=0.20.0",
+]
+
+[project.scripts]
+fastapi-doctor = "fastapi_doctor:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+select = ["E", "F", "I", "B", "C4", "W", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true

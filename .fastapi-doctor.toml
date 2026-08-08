@@ -1,0 +1,124 @@
+# Configuration example for FastAPI Doctor v3.0.0
+
+[analysis]
+# Enable deep analysis (data flow, advanced SQL injection, etc.)
+deep = true
+
+# Analyze FastAPI dependency graph
+analyze_deps = true
+
+# Analyze OpenAPI/Swagger documentation
+analyze_openapi = true
+
+# Analyze performance issues
+analyze_performance = true
+
+# Run external tools (ruff, mypy, bandit, etc.)
+run_external_tools = true
+
+# Run tests if available
+run_tests = false
+
+[thresholds]
+# Fail CI/CD if findings of this severity or higher are found
+fail_on = "MEDIUM"
+
+# Maximum file size to scan (in MB)
+max_file_size_mb = 50
+
+# Maximum number of findings to report
+max_findings = 1000
+
+[exclusions]
+# Paths to exclude from analysis
+paths = [
+    "tests/",
+    "migrations/",
+    "__pycache__/",
+    ".git/",
+    ".venv/",
+    "venv/",
+    "node_modules/",
+]
+
+# File patterns to exclude
+patterns = [
+    "*_test.py",
+    "test_*.py",
+    "conftest.py",
+    "setup.py",
+    "build.py",
+]
+
+# Specific files to exclude
+files = [
+    "local_settings.py",
+    "dev_settings.py",
+]
+
+[reporting]
+# Default output format
+format = "text"
+
+# Output file (optional)
+# output = "audit_report.json"
+
+# Include metrics in report
+include_metrics = true
+
+# Include dependency graph in report
+include_dependency_graph = true
+
+# Include OpenAPI analysis in report
+include_openapi_analysis = true
+
+# Include performance metrics in report
+include_performance_metrics = true
+
+[security]
+# Check for hardcoded secrets
+check_secrets = true
+
+# Check for SQL injection
+check_sql_injection = true
+
+# Check for command injection
+check_command_injection = true
+
+# Check for path traversal
+check_path_traversal = true
+
+# Check for authentication issues
+check_authentication = true
+
+# Check for authorization issues
+check_authorization = true
+
+[performance]
+# Check for N+1 query patterns
+check_n_plus_one = true
+
+# Check for expensive loops
+check_expensive_loops = true
+
+# Check for large data structures
+check_large_data_structures = true
+
+# Check for redundant calculations
+check_redundant_calculations = true
+
+[architecture]
+# Check for Clean Architecture violations
+check_clean_architecture = true
+
+# Check for circular imports
+check_circular_imports = true
+
+# Check for God classes
+check_god_classes = true
+
+# Check for tight coupling
+check_tight_coupling = true
+
+# Check for separation of concerns
+check_separation_of_concerns = true

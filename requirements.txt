@@ -1,0 +1,14 @@
+# Requirements for FastAPI Doctor
+# Base requirements
+typing-extensions>=4.0.0
+
+# Optional requirements for full functionality
+# ruff>=0.1.0
+# mypy>=1.0.0
+# bandit>=1.7.0
+# pip-audit>=2.0.0
+# semgrep>=1.0.0
+# pytest>=7.0.0
+# networkx>=3.0
+# graphviz>=0.20.0
+# pyyaml>=6.0

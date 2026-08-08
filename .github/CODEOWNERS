@@ -1,0 +1,5 @@
+# Code owners for FastAPI Doctor
+# Only the owner can modify the codebase
+# Others can read and create issues
+
+* @guerschom1103
