@@ -42,13 +42,13 @@ pip install "fastapi-doctor[full]"
 ### Installation depuis GitHub
 
 ```bash
-pip install git+https://github.com/guerschom1103/fastapi_doctor_v2.1.0.git
+pip install git+https://github.com/guerschom1103/fastapi_doctor.git
 ```
 
 ### Installation depuis Source
 
 ```bash
-git clone https://github.com/guerschom1103/fastapi_doctor_v2.1.0.git
+git clone https://github.com/guerschom1103/fastapi_doctor.git
 cd fastapi-doctor
 pip install -e .
 ```
@@ -439,7 +439,7 @@ FastAPI Doctor est un outil d'audit statique. Il ne remplace pas une revue de co
 
 ### Issues GitHub
 
-Signalez les bugs et demandez des fonctionnalités sur [GitHub Issues](https://github.com/guerschom1103/fastapi_doctor_v2.1.0/issues).
+Signalez les bugs et demandez des fonctionnalités sur [GitHub Issues](https://github.com/guerschom1103/fastapi_doctor/issues).
 
 ### Questions Fréquentes
 

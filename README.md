@@ -54,8 +54,8 @@ pip install "fastapi-doctor[full]"
 ### From Source
 
 ```bash
-git clone https://github.com/guerschom1103/fastapi_doctor_v2.1.0.git
-cd fastapi_doctor_v2.1.0
+git clone https://github.com/guerschom1103/fastapi_doctor.git
+cd fastapi_doctor
 pip install -e .
 ```
 
@@ -164,8 +164,8 @@ fastapi-doctor/
 
 ```bash
 # Clone repository
-git clone https://github.com/guerschom1103/fastapi_doctor_v2.1.0.git
-cd fastapi_doctor_v2.1.0
+git clone https://github.com/guerschom1103/fastapi_doctor.git
+cd fastapi_doctor
 
 # Create virtual environment
 python -m venv venv

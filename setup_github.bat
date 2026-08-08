@@ -25,7 +25,7 @@ echo.
 echo 1. Allez sur: https://github.com/new
 echo.
 echo 2. Remplissez:
-echo    - Repository name: fastapi_doctor_v2.1.0
+echo    - Repository name: fastapi_doctor
 echo    - Description: Professional audit orchestrator for Python/FastAPI projects
 echo    - Public: Oui
 echo    - Initialize with README: Non (décocher)
@@ -35,7 +35,7 @@ echo.
 echo 3. Cliquez sur "Create repository"
 echo.
 echo 4. Exécutez ces commandes dans le terminal:
-echo    git remote add origin https://github.com/guerschom1103/fastapi_doctor_v2.1.0.git
+echo    git remote add origin https://github.com/guerschom1103/fastapi_doctor.git
 echo    git branch -M main
 echo    git push -u origin main
 echo.
@@ -48,7 +48,7 @@ echo CONFIGURATION DES PERMISSIONS
 echo ========================================
 echo.
 echo Pour configurer les permissions:
-echo 1. Allez sur: https://github.com/guerschom1103/fastapi_doctor_v2.1.0/settings
+echo 1. Allez sur: https://github.com/guerschom1103/fastapi_doctor/settings
 echo 2. Cliquez sur "Manage access"
 echo 3. Seul vous (guerschom1103) aurez accès en écriture
 echo 4. Les autres pourront seulement lire et créer des issues
