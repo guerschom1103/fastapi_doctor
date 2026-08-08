@@ -40,6 +40,9 @@ fastapi-doctor = "fastapi_doctor:main"
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+py-modules = ["fastapi_doctor"]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 100
