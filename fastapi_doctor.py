@@ -51,7 +51,7 @@ from modules.analyzers.architecture import ArchitectureAnalyzer
 from modules.reporters.html_reporter import HTMLReporter
 from modules.reporters.sarif_reporter import SARIFReporter
 from modules.reporters.json_reporter import JSONReporter
-from modules.utils.file_utils import scan_tree, read_all, is_dotenv_file, rel
+from modules.utils.file_utils import scan_tree, read_all, read_text, is_dotenv_file, rel
 from modules.utils.security_utils import SecurityUtils
 
 # Répertoires à élaguer PENDANT le parcours
