@@ -52,3 +52,19 @@ def read_text(path: Path, limit: int = 5_000_000) -> str:
         return path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
+
+
+def is_test_path(path: Path, root: Path | None = None) -> bool:
+    """Return True for conventional Python test files and directories."""
+    try:
+        candidate = path.relative_to(root) if root else path
+    except ValueError:
+        candidate = path
+    parts = {part.lower() for part in candidate.parts}
+    name = path.name.lower()
+    return (
+        bool(parts & {"test", "tests", "testing"})
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+        or name == "conftest.py"
+    )

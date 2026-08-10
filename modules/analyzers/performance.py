@@ -154,30 +154,37 @@ class PerformanceASTVisitor(ast.NodeVisitor):
         self.generic_visit(node)
     
     def _check_n_plus_one(self, node):
-        """Check for N+1 query patterns."""
-        # Simple pattern detection: database queries in loops
-        loop_body = ast.unparse(node.body) if hasattr(ast, 'unparse') else str(node.body)
-        
-        # Look for database query patterns in loops
-        query_patterns = [
-            r"\.get\(", r"\.filter\(", r"\.query\(", r"\.select\(",
-            r"session\.query\(", r"db\.query\(", r"\.find_one\(", r"\.find\("
-        ]
-        
-        for pattern in query_patterns:
-            if re.search(pattern, loop_body, re.IGNORECASE):
-                self.n_plus_one_patterns += 1
-                self.findings.append({
-                    "severity": "MEDIUM",
-                    "category": "Performance",
-                    "title": "Potential N+1 query pattern",
-                    "detail": "Database query detected inside a loop (N+1 problem).",
-                    "file": rel(self.path, self.root),
-                    "line": node.lineno,
-                    "recommendation": "Use eager loading (JOINs) or batch queries to avoid N+1.",
-                    "rule_id": "PERF-N-PLUS-ONE"
-                })
-                break
+        """Detect ORM/database calls in loops, without treating generic .get() as SQL."""
+        query_methods = {
+            "query", "execute", "scalar", "scalars", "find_one", "fetchone",
+            "fetchall", "first", "one", "one_or_none",
+        }
+        database_roots = {"db", "session", "database", "connection", "conn", "cursor"}
+
+        for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+            if not isinstance(child, ast.Call) or not isinstance(child.func, ast.Attribute):
+                continue
+            method = child.func.attr.lower()
+            owner = child.func.value
+            root_name = owner.id.lower() if isinstance(owner, ast.Name) else ""
+            is_known_query = method in query_methods and (
+                root_name in database_roots or method in {"query", "execute", "scalars"}
+            )
+            if not is_known_query:
+                continue
+            self.n_plus_one_patterns += 1
+            self.findings.append({
+                "severity": "MEDIUM",
+                "category": "Performance",
+                "title": "Requête potentiellement répétée dans une boucle",
+                "detail": f"L'appel base de données `{root_name or 'objet'}.{method}()` est exécuté dans une boucle.",
+                "file": rel(self.path, self.root),
+                "line": child.lineno,
+                "recommendation": "Vérifier le nombre de requêtes et préférer un chargement groupé si nécessaire.",
+                "rule_id": "PERF-N-PLUS-ONE",
+                "confidence": "HIGH" if root_name in database_roots else "MEDIUM",
+            })
+            break
     
     def _check_expensive_loop_operations(self, node):
         """Check for expensive operations in loops."""
@@ -185,10 +192,8 @@ class PerformanceASTVisitor(ast.NodeVisitor):
         loop_body = ast.unparse(node.body) if hasattr(ast, 'unparse') else str(node.body)
         
         expensive_patterns = [
-            r"list\(range\(\d+\)\)",  # list(range(large_number))
-            r"\[\s*\]\s*\*\s*\d+",    # [] * large_number
-            r"\.append\(.*\)",         # Multiple appends
-            r"\.extend\(.*\)",         # Multiple extends
+            r"list\(range\([1-9]\d{5,}\)\)",
+            r"\[[^\]]*\]\s*\*\s*[1-9]\d{5,}",
         ]
         
         for pattern in expensive_patterns:
@@ -197,12 +202,13 @@ class PerformanceASTVisitor(ast.NodeVisitor):
                 self.findings.append({
                     "severity": "LOW",
                     "category": "Performance",
-                    "title": "Inefficient list operation in loop",
-                    "detail": "List creation or extension detected inside a loop.",
+                    "title": "Allocation volumineuse dans une boucle",
+                    "detail": "Une grande structure semble être créée à chaque itération.",
                     "file": rel(self.path, self.root),
                     "line": node.lineno,
-                    "recommendation": "Pre-allocate lists or use list comprehensions when possible.",
-                    "rule_id": "PERF-LIST-IN-LOOP"
+                    "recommendation": "Déplacer l'allocation hors de la boucle lorsque c'est possible.",
+                    "rule_id": "PERF-LIST-IN-LOOP",
+                    "confidence": "HIGH",
                 })
                 break
     

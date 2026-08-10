@@ -51,9 +51,10 @@ from modules.analyzers.architecture import ArchitectureAnalyzer
 from modules.reporters.html_reporter import HTMLReporter
 from modules.reporters.sarif_reporter import SARIFReporter
 from modules.reporters.json_reporter import JSONReporter
-from modules.utils.file_utils import scan_tree, read_all, read_text, is_dotenv_file, rel
+from modules.utils.file_utils import scan_tree, read_all, read_text, is_dotenv_file, is_test_path, rel
 from modules.utils.security_utils import SecurityUtils
 from modules.utils.progress import ProgressUI
+from modules.utils.translations import translate_finding
 
 # Répertoires à élaguer PENDANT le parcours
 SKIP_DIRS = {
@@ -61,6 +62,7 @@ SKIP_DIRS = {
     "node_modules", "__pycache__", ".mypy_cache", ".pytest_cache",
     ".ruff_cache", ".tox", "dist", "build", ".idea", ".vscode",
     ".next", "htmlcov", "site-packages", "coverage", ".coverage",
+    ".pytest-tmp-codex",
 }
 
 TEXT_EXTENSIONS = {".py", ".pyi", ".toml", ".ini", ".cfg", ".yaml", ".yml", ".json", ".env"}
@@ -338,8 +340,22 @@ def external_tools(root: Path, findings: list[Finding], deep: bool, run_tests: b
     return results
 
 def score(findings: list[dict]) -> int:
-    penalty = sum(WEIGHTS.get(f.get("severity", "INFO"), 0) for f in findings)
-    return max(0, min(100, 100 - min(100, penalty)))
+    """Score findings with diminishing returns for repeated instances of one rule."""
+    base = {"CRITICAL": 15.0, "HIGH": 8.0, "MEDIUM": 3.0, "LOW": 0.5, "INFO": 0.0}
+    confidence = {"HIGH": 1.0, "MEDIUM": 0.65, "LOW": 0.3}
+    groups: dict[str, list[dict]] = {}
+    for finding in findings:
+        rule = finding.get("rule_id") or finding.get("title") or "unknown"
+        groups.setdefault(str(rule), []).append(finding)
+
+    penalty = 0.0
+    for repeated in groups.values():
+        first = repeated[0]
+        weight = base.get(first.get("severity", "INFO"), 0.0)
+        certainty = confidence.get(first.get("confidence", "MEDIUM"), 0.65)
+        repetition_factor = 1.0 + 0.15 * min(4, len(repeated) - 1)
+        penalty += weight * certainty * repetition_factor
+    return max(0, min(100, round(100 - penalty)))
 
 def build_parser():
     p = argparse.ArgumentParser(description="FastAPI Doctor v3 - professional Python/FastAPI audit")
@@ -357,6 +373,10 @@ def build_parser():
     p.add_argument(
         "--progress", choices=["auto", "always", "never"], default="auto",
         help="Animation de progression: auto (terminal uniquement), always ou never",
+    )
+    p.add_argument(
+        "--include-tests", action="store_true",
+        help="Inclure les tests dans les analyses heuristiques avancées",
     )
     return p
 
@@ -380,13 +400,16 @@ def main() -> int:
     with progress.phase("Détection de la stack"):
         detected = detect(root, files, all_paths, content_cache)
     findings: list[Finding] = []
+    analysis_files = files if args.include_tests else [
+        path for path in files if not is_test_path(path, root)
+    ]
     
     # Run advanced analyzers
     advanced_results = {}
     if args.deep or args.analyze_deps or args.analyze_openapi or args.analyze_performance:
         with progress.phase("Analyse approfondie"):
             advanced_results = run_advanced_analyzers(
-                root, files, all_paths, findings, detected, content_cache, args.deep,
+                root, analysis_files, all_paths, findings, detected, content_cache, args.deep,
                 args.analyze_deps, args.analyze_openapi, args.analyze_performance,
             )
     
@@ -405,7 +428,9 @@ def main() -> int:
     # Deduplicate findings
     unique = {}
     for f in findings:
+        translate_finding(f)
         f.setdefault("source", "FastAPI Doctor")
+        f.setdefault("confidence", "MEDIUM")
         f.setdefault("recommendation", "")
         f.setdefault("file", None)
         f.setdefault("line", None)
@@ -434,7 +459,7 @@ def main() -> int:
 
     # Convert report to dict for reporters
     report_dict = asdict(report)
-    progress.summary(report.score, len(findings))
+    progress.summary(report.score, findings)
     
     # Generate output
     if args.format == "json":

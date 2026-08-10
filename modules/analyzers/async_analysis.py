@@ -72,26 +72,29 @@ class AsyncASTVisitor(ast.NodeVisitor):
     def visit_AsyncFunctionDef(self, node):
         """Visit async function definition."""
         self.async_functions += 1
+        parent_is_async = bool(self.function_stack) and self.function_stack[-1][0] == "async"
+        previous_async_state = self.current_function_is_async
         self.current_function_is_async = True
         self.function_stack.append(("async", node.name))
         
         # Check for nested async functions (can be problematic)
-        if len(self.function_stack) > 1:
+        if parent_is_async:
             self.nested_async += 1
             self.findings.append({
                 "severity": "LOW",
                 "category": "Async Performance",
-                "title": "Nested async function",
-                "detail": f"Async function '{node.name}' is defined inside another function.",
+                "title": "Fonction async imbriquée dans une fonction async",
+                "detail": f"La fonction async `{node.name}` est recréée à chaque appel de sa fonction parente.",
                 "file": rel(self.path, self.root),
                 "line": node.lineno,
-                "recommendation": "Consider moving nested async functions to module level.",
-                "rule_id": "ASYNC-NESTED-FUNCTION"
+                "recommendation": "La déplacer au niveau du module seulement si elle ne capture aucun état local.",
+                "rule_id": "ASYNC-NESTED-FUNCTION",
+                "confidence": "LOW",
             })
         
         self.generic_visit(node)
         self.function_stack.pop()
-        self.current_function_is_async = False
+        self.current_function_is_async = previous_async_state
     
     def visit_FunctionDef(self, node):
         """Visit sync function definition."""

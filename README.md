@@ -95,6 +95,11 @@ progress indicator. Machine-readable output stays clean because progress is writ
 stderr and is disabled automatically when output is redirected. Use `--progress always`
 to force it or `--progress never` to disable it.
 
+Advanced heuristic checks ignore tests by default to avoid treating fixtures and mocks as
+production problems. Pass `--include-tests` when those files should also be reviewed. Each
+finding includes a confidence level, repeated instances of one rule have diminishing impact
+on the score, and the HTML report provides French search and severity/confidence filters.
+
 ## Configuration
 
 Create a `.fastapi-doctor.toml` file in your project root:

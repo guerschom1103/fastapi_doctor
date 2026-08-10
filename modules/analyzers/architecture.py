@@ -50,7 +50,14 @@ class ArchitectureAnalyzer:
     
     def _build_import_graph(self) -> Dict[str, Set[str]]:
         """Build a graph of imports between files."""
-        graph = {}
+        graph: Dict[str, Set[str]] = {}
+        module_to_file: Dict[str, str] = {}
+        for path in self.files:
+            file_key = rel(path, self.root)
+            parts = list(Path(file_key).with_suffix("").parts)
+            if parts and parts[-1] == "__init__":
+                parts.pop()
+            module_to_file[".".join(parts)] = file_key
         
         for path in self.files:
             source = self.content_cache.get(path, "")
@@ -58,7 +65,7 @@ class ArchitectureAnalyzer:
                 continue
             
             file_key = rel(path, self.root)
-            imports = set()
+            imported_modules = set()
             
             # Parse imports
             try:
@@ -66,14 +73,22 @@ class ArchitectureAnalyzer:
                 for node in ast.walk(tree):
                     if isinstance(node, ast.Import):
                         for alias in node.names:
-                            imports.add(alias.name.split('.')[0])
+                            imported_modules.add(alias.name)
                     elif isinstance(node, ast.ImportFrom):
                         if node.module:
-                            imports.add(node.module.split('.')[0])
+                            imported_modules.add(node.module)
             except SyntaxError:
                 continue
             
-            graph[file_key] = imports
+            targets = set()
+            for imported in imported_modules:
+                candidate = imported
+                while candidate:
+                    if candidate in module_to_file:
+                        targets.add(module_to_file[candidate])
+                        break
+                    candidate = candidate.rpartition(".")[0]
+            graph[file_key] = targets
         
         return graph
     
@@ -108,15 +123,8 @@ class ArchitectureAnalyzer:
             path.append(node)
             
             for neighbor in graph.get(node, set()):
-                # Convert module name to file path (simplified)
-                neighbor_file = None
-                for file_key in graph:
-                    if neighbor in file_key or file_key.endswith(f"/{neighbor}.py"):
-                        neighbor_file = file_key
-                        break
-                
-                if neighbor_file and neighbor_file in graph:
-                    dfs(neighbor_file, path.copy())
+                if neighbor in graph:
+                    dfs(neighbor, path.copy())
             
             recursion_stack.remove(node)
             path.pop()
@@ -225,30 +233,8 @@ class ArchitectureAnalyzer:
                 "rule_id": "ARCH-HIGH-COUPLING"
             })
         
-        # Check for concrete class imports instead of interfaces
-        lines = source.splitlines()
-        for i, line in enumerate(lines, 1):
-            if "import " in line or "from " in line:
-                # Look for concrete class imports (simplified check)
-                concrete_patterns = [
-                    r"import.*Service", r"import.*Repository", r"import.*Controller",
-                    r"from.*import.*Service", r"from.*import.*Repository", r"from.*import.*Controller"
-                ]
-                
-                for pattern in concrete_patterns:
-                    if re.search(pattern, line, re.IGNORECASE):
-                        self.metrics["tight_coupling"] += 1
-                        self.findings.append({
-                            "severity": "LOW",
-                            "category": "Architecture",
-                            "title": "Concrete dependency import",
-                            "detail": "Importing concrete implementation instead of interface.",
-                            "file": file_key,
-                            "line": i,
-                            "recommendation": "Use dependency injection and program to interfaces.",
-                            "rule_id": "ARCH-CONCRETE-IMPORT"
-                        })
-                        break
+        # Importing a Service/Repository is normal in FastAPI. Without knowledge of
+        # project boundaries, class names alone cannot establish tight coupling.
     
     def _check_separation_of_concerns(self, path: Path, source: str):
         """Check for separation of concerns violations."""

@@ -50,6 +50,8 @@ include = ["modules*"]
 [tool.ruff]
 target-version = "py310"
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "B", "C4", "W", "UP"]
 ignore = ["E501", "B008"]
 

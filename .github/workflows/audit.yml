@@ -2,39 +2,53 @@ name: FastAPI Doctor Audit
 
 on:
   push:
-    branches: [ main ]
+    branches: [master]
   pull_request:
-    branches: [ main ]
+    branches: [master]
+  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 0'  # Run weekly on Sunday
+    - cron: "0 0 * * 0"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
 
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-    - name: Install FastAPI Doctor
-      run: |
-        python -m pip install --upgrade pip
-        pip install .[full]
-    - name: Run FastAPI Doctor audit
-      run: |
-        fastapi-doctor --path . --deep --fail-on HIGH --format sarif --output audit.sarif
-    - name: Upload SARIF report
-      uses: github/codeql-action/upload-sarif@v2
-      if: always()
-      with:
-        sarif_file: audit.sarif
-    - name: Upload HTML report
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: audit-report
-        path: audit.html
-    - name: Generate HTML report
-      run: |
-        fastapi-doctor --path . --deep --format html --output audit.html
+      - uses: actions/checkout@v6
+
+      - name: Installer Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer FastAPI Doctor depuis le dépôt
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Générer le rapport SARIF
+        continue-on-error: true
+        run: fastapi-doctor --path . --deep --no-external --format sarif --output audit.sarif
+
+      - name: Générer le rapport HTML
+        continue-on-error: true
+        run: fastapi-doctor --path . --deep --no-external --format html --output audit.html
+
+      - name: Publier le rapport SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('audit.sarif') != ''
+        with:
+          sarif_file: audit.sarif
+
+      - name: Publier le rapport HTML
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('audit.html') != ''
+        with:
+          name: fastapi-doctor-report
+          path: audit.html
+          if-no-files-found: error

@@ -27,6 +27,7 @@ class ProgressUI:
         except (LookupError, UnicodeEncodeError):
             self._frames = ("|", "/", "-", "\\")
             self._ok, self._error = "+", "x"
+        self._doctor_frames = ("\\(o_o) ", " (o_o)/", "\\(o_o)/", " (o_o) ")
 
     @contextmanager
     def phase(self, label: str) -> Iterator[None]:
@@ -38,7 +39,7 @@ class ProgressUI:
         started = time.perf_counter()
 
         def animate() -> None:
-            for frame in itertools.cycle(self._frames):
+            for frame in itertools.cycle(self._doctor_frames):
                 if stopped.is_set():
                     break
                 with self._lock:
@@ -65,10 +66,28 @@ class ProgressUI:
                 self.stream.write(f"\r\033[32m{self._ok}\033[0m  {label} \033[2m{elapsed:.2f}s\033[0m\033[K\n")
                 self.stream.flush()
 
-    def summary(self, score: int, finding_count: int) -> None:
+    def summary(self, score: int, findings: list[dict]) -> None:
         if self.enabled:
+            severities = {finding.get("severity", "INFO") for finding in findings}
+            if "CRITICAL" in severities or score < 50:
+                color, face = "31", "( x_x )"
+            elif "HIGH" in severities or score < 80:
+                color, face = "33", "( o_o )"
+            else:
+                color, face = "32", "( ^_^ )"
+            actionable = sum(
+                finding.get("severity") in {"CRITICAL", "HIGH", "MEDIUM"}
+                for finding in findings
+            )
+            mascot = (
+                f"\033[{color}m    .---.\n"
+                f"   {face}\n"
+                "    /|_|\\\n"
+                "     / \\\033[0m\n"
+            )
+            self.stream.write(mascot)
             self.stream.write(
                 f"\033[1mAudit termine\033[0m - score {score}/100, "
-                f"{finding_count} probleme(s) detecte(s)\n"
+                f"{actionable} probleme(s) a examiner, {len(findings)} signalement(s) au total\n"
             )
             self.stream.flush()

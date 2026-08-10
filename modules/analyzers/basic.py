@@ -6,7 +6,7 @@ import ast
 import re
 from pathlib import Path
 from typing import Dict, List
-from modules.utils.file_utils import rel, read_text
+from modules.utils.file_utils import is_test_path, rel, read_text
 from modules.utils.security_utils import SecurityUtils
 
 class BasicAnalyzer:
@@ -89,7 +89,12 @@ class BasicAnalyzer:
                     
                     if self.deep:
                         args = node.args.posonlyargs + node.args.args + node.args.kwonlyargs
-                        untyped = [a.arg for a in args if a.annotation is None]
+                        untyped = [
+                            a.arg for a in args
+                            if a.annotation is None and a.arg not in {"self", "cls"}
+                        ]
+                        if is_test_path(path, self.root):
+                            untyped = []
                         if untyped:
                             self._add_finding(
                                 "LOW", "Type Safety", "Paramètres non annotés",
@@ -123,6 +128,8 @@ class BasicAnalyzer:
                                 )
             
             for i, line in enumerate(source.splitlines(), 1):
+                if is_test_path(path, self.root):
+                    break
                 if re.search(r"(?i)(password|secret|api[_-]?key|token)\s*=\s*[\"'][^\"']{8,}[\"']", line):
                     self._add_finding(
                         "HIGH", "Secrets", "Secret potentiellement codé en dur",
@@ -168,6 +175,8 @@ class BasicAnalyzer:
             
             TEXT_EXTENSIONS = {".py", ".pyi", ".toml", ".ini", ".cfg", ".yaml", ".yml", ".json", ".env"}
             if (dotenv or p.suffix.lower() in TEXT_EXTENSIONS) and size <= 5_000_000:
+                if is_test_path(p, self.root) and not dotenv:
+                    continue
                 text = self.content_cache[p] if p in self.content_cache else read_text(p)
                 for pattern, title in SecurityUtils.detect_secrets_in_text(text):
                     self._add_finding(
@@ -179,47 +188,49 @@ class BasicAnalyzer:
                     )
     
     def _framework_analysis(self):
-        """Original framework analysis from v2.1.0."""
-        combined = "\n".join(self.content_cache.get(p, "") for p in self.files[:500]).lower()
-        
-        # This would need the detected dict from main
-        # For now, we'll do a simplified version
-        if "fastapi" in combined:
-            if 'allow_origins=["*"]' in combined or "allow_origins=['*']" in combined:
-                self._add_finding(
-                    "MEDIUM", "FastAPI Security", "CORS wildcard détecté",
-                    "allow_origins=* semble autoriser toutes les origines.",
-                    None, None,
-                    "Limiter les origines en production.",
-                    "API-CORS-WILDCARD"
+        """Inspect actual call arguments instead of comments and documentation."""
+        for path in self.files:
+            if is_test_path(path, self.root):
+                continue
+            try:
+                tree = ast.parse(self.content_cache.get(path, ""), filename=str(path))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = node.func.id if isinstance(node.func, ast.Name) else (
+                    node.func.attr if isinstance(node.func, ast.Attribute) else ""
                 )
-            if "debug=true" in combined or "debug=True" in combined:
-                self._add_finding(
-                    "HIGH", "Production", "Mode debug potentiellement actif",
-                    "Une configuration debug=True a été détectée.",
-                    None, None,
-                    "Désactiver le debug en production.",
-                    "PROD-DEBUG"
-                )
-        
-        if "jwt" in combined and self.deep:
-            if 'algorithm="none"' in combined or "algorithm='none'" in combined:
-                self._add_finding(
-                    "CRITICAL", "Authentication", "JWT algorithm=none détecté",
-                    "L'algorithme none ne doit pas être accepté pour des tokens d'authentification.",
-                    None, None,
-                    "Imposer une liste d'algorithmes de signature autorisés.",
-                    "AUTH-JWT-NONE"
-                )
-        
-        if "sqlalchemy" in combined and self.deep and "text(" in combined:
-            self._add_finding(
-                "MEDIUM", "Database", "Usage de SQLAlchemy text() détecté",
-                "text() n'est pas forcément dangereux, mais mérite une revue si des fragments proviennent d'entrées utilisateur.",
-                None, None,
-                "Utiliser des paramètres liés et éviter de concaténer des entrées utilisateur dans SQL.",
-                "DB-TEXT-REVIEW"
-            )
+                keywords = {keyword.arg: keyword.value for keyword in node.keywords if keyword.arg}
+
+                debug = keywords.get("debug")
+                if name == "FastAPI" and isinstance(debug, ast.Constant) and debug.value is True:
+                    self._add_finding(
+                        "HIGH", "Production", "Mode debug actif", "FastAPI est instancié avec `debug=True`.",
+                        rel(path, self.root), node.lineno, "Désactiver le debug en production.", "PROD-DEBUG"
+                    )
+
+                origins = keywords.get("allow_origins")
+                if isinstance(origins, (ast.List, ast.Tuple)) and any(
+                    isinstance(item, ast.Constant) and item.value == "*" for item in origins.elts
+                ):
+                    self._add_finding(
+                        "MEDIUM", "FastAPI Security", "CORS générique détecté",
+                        "La configuration autorise toutes les origines.", rel(path, self.root), node.lineno,
+                        "Limiter explicitement les origines en production.", "API-CORS-WILDCARD"
+                    )
+
+                if self.deep and name in {"decode", "encode"}:
+                    algorithm = keywords.get("algorithm") or keywords.get("algorithms")
+                    values = algorithm.elts if isinstance(algorithm, (ast.List, ast.Tuple)) else [algorithm]
+                    if any(isinstance(value, ast.Constant) and str(value.value).lower() == "none" for value in values):
+                        self._add_finding(
+                            "CRITICAL", "Authentication", "Algorithme JWT `none` accepté",
+                            "Un appel JWT accepte explicitement l'algorithme non signé `none`.",
+                            rel(path, self.root), node.lineno,
+                            "Imposer une liste d'algorithmes signés autorisés.", "AUTH-JWT-NONE"
+                        )
     
     def _docker_analysis(self):
         """Original Docker analysis from v2.1.0."""

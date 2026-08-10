@@ -20,7 +20,7 @@ class TextReporter:
             f"Mode   : {report['mode']}",
             f"Durée  : {report['duration_seconds']}s",
             "",
-            "Findings: " + " | ".join(f"{s}: {counts[s]}" for s in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO") if counts[s]) if report["findings"] else "Findings: aucun",
+            "Signalements : " + " | ".join(f"{s}: {counts[s]}" for s in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO") if counts[s]) if report["findings"] else "Signalements : aucun",
             "=" * 72,
         ]
         
@@ -28,19 +28,20 @@ class TextReporter:
             loc = f"{f['file']}:{f['line']}" if f.get("file") and f.get("line") else (f.get("file") or "")
             lines += [
                 f"[{f['severity']}] {f['category']} | {f['title']}",
-                f"  Location: {loc}",
+                f"  Emplacement : {loc}",
                 f"  {f['detail']}",
-                f"  Recommendation: {f['recommendation']}",
+                f"  Recommandation : {f['recommendation']}",
+                f"  Confiance : {f.get('confidence', 'MEDIUM')}",
                 f"  Source: {f['source']}",
                 "",
             ]
         
         # Add advanced analysis summary
         if report.get("dependency_graph"):
-            lines.append("[ADVANCED] Dependency graph analysis completed")
+            lines.append("[AVANCÉ] Analyse du graphe de dépendances terminée")
         if report.get("openapi_analysis"):
-            lines.append("[ADVANCED] OpenAPI analysis completed")
+            lines.append("[AVANCÉ] Analyse OpenAPI terminée")
         if report.get("performance_metrics"):
-            lines.append("[ADVANCED] Performance analysis completed")
+            lines.append("[AVANCÉ] Analyse des performances terminée")
         
         return "\n".join(lines)

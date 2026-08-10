@@ -9,6 +9,17 @@ from typing import Dict, List
 from modules.utils.file_utils import rel
 from modules.utils.security_utils import SecurityUtils
 
+
+def looks_like_sql(text: str) -> bool:
+    """Require SQL structure, not merely an English word such as 'update'."""
+    normalized = " ".join(text.lower().split())
+    return bool(
+        re.search(r"\bselect\b.+\bfrom\b", normalized)
+        or re.search(r"\binsert\s+into\b", normalized)
+        or re.search(r"\bupdate\b.+\bset\b", normalized)
+        or re.search(r"\bdelete\s+from\b", normalized)
+    )
+
 class SQLInjectionAnalyzer:
     """Advanced SQL injection detection analyzer."""
     
@@ -53,8 +64,7 @@ class SQLInjectionAnalyzer:
             line_lower = line.lower()
             
             # Check for SQL keywords
-            sql_keywords = ["select", "insert", "update", "delete", "where", "from", "join"]
-            has_sql = any(keyword in line_lower for keyword in sql_keywords)
+            has_sql = looks_like_sql(line)
             
             if has_sql:
                 self.metrics["sql_statements_found"] += 1
@@ -74,7 +84,7 @@ class SQLInjectionAnalyzer:
                     })
                 
                 # Check for f-strings in SQL
-                if "f\"" in line and any(sql_keyword in line_lower for sql_keyword in sql_keywords):
+                if ("f\"" in line or "f'" in line) and has_sql:
                     self.metrics["potential_injections"] += 1
                     self.findings.append({
                         "severity": "HIGH",
@@ -88,7 +98,7 @@ class SQLInjectionAnalyzer:
                     })
                 
                 # Check for .format() in SQL
-                if ".format(" in line and any(sql_keyword in line_lower for sql_keyword in sql_keywords):
+                if ".format(" in line and has_sql:
                     self.metrics["potential_injections"] += 1
                     self.findings.append({
                         "severity": "HIGH",
@@ -177,8 +187,11 @@ class SQLInjectionVisitor(ast.NodeVisitor):
             line = lines[line_num - 1]
             
             # Check if this f-string contains SQL keywords
-            sql_keywords = ["select", "insert", "update", "delete", "where", "from"]
-            if any(keyword in line.lower() for keyword in sql_keywords):
+            static_text = "".join(
+                value.value for value in node.values
+                if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            )
+            if looks_like_sql(static_text):
                 self.potential_injections += 1
                 self.findings.append({
                     "severity": "HIGH",
