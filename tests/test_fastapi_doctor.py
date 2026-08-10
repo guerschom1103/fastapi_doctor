@@ -128,3 +128,21 @@ async def process():
     # Check for async findings
     async_findings = [f for f in d["findings"] if "ASYNC" in f.get("rule_id", "")]
     assert len(async_findings) > 0
+
+def test_progress_is_sent_to_stderr_without_corrupting_json(tmp_path):
+    (tmp_path / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    r = audit(tmp_path, "--format", "json", "--progress", "always")
+    data = json.loads(r.stdout)
+    assert data["project"] == tmp_path.name
+    assert "Exploration du projet" in r.stderr
+    assert "Audit termine" in r.stderr
+
+def test_targeted_performance_analysis(tmp_path):
+    (tmp_path / "main.py").write_text(
+        "def find(items):\n    for item in items:\n        if item in items:\n            return item\n",
+        encoding="utf-8",
+    )
+    r = audit(tmp_path, "--format", "json", "--analyze-performance")
+    data = json.loads(r.stdout)
+    assert data["performance_metrics"] is not None
+    assert data["dependency_graph"] is None

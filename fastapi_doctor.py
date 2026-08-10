@@ -53,6 +53,7 @@ from modules.reporters.sarif_reporter import SARIFReporter
 from modules.reporters.json_reporter import JSONReporter
 from modules.utils.file_utils import scan_tree, read_all, read_text, is_dotenv_file, rel
 from modules.utils.security_utils import SecurityUtils
+from modules.utils.progress import ProgressUI
 
 # Répertoires à élaguer PENDANT le parcours
 SKIP_DIRS = {
@@ -125,7 +126,7 @@ def run(cmd: list[str], cwd: Path, timeout: int = DEFAULT_TIMEOUT) -> tuple[int,
         return 1, "", repr(exc), time.perf_counter() - start
 
 def detect(root: Path, files: list[Path], all_paths: list[Path], content_cache: dict[Path, str]) -> dict[str, bool]:
-    text = "\n".join(content_cache.get(p, "") for p in files[:500]).lower()
+    text = "\n".join(list(content_cache.values())[:500]).lower()
     names = {p.name.lower() for p in all_paths}
     return {
         "fastapi": "from fastapi" in text or "import fastapi" in text,
@@ -139,7 +140,11 @@ def detect(root: Path, files: list[Path], all_paths: list[Path], content_cache: 
         "redis": "redis" in text,
         "celery": "celery" in text,
         "docker": "dockerfile" in names or "docker-compose.yml" in names or "compose.yml" in names,
-        "kubernetes": any(p.suffix in {".yaml", ".yml"} and "kubernetes" in read_text(p, 1_000_000).lower() for p in all_paths[:200]),
+        "kubernetes": any(
+            p.suffix in {".yaml", ".yml"}
+            and "kubernetes" in content_cache.get(p, "").lower()
+            for p in all_paths[:200]
+        ),
         "pytest": "pytest" in text or any("test" in p.name.lower() for p in files),
         "postgresql": bool(re.search(r"\b(postgresql|asyncpg|psycopg)\b", text)),
         "graphql": "graphql" in text,
@@ -159,9 +164,11 @@ def add_finding(findings, severity, category, title, detail, path=None, line=Non
         "rule_id": rule_id
     })
 
-def run_advanced_analyzers(root: Path, files: list[Path], findings: list[Finding], 
+def run_advanced_analyzers(root: Path, files: list[Path], all_paths: list[Path], findings: list[Finding],
                          detected: dict[str, bool], content_cache: dict[Path, str], 
-                         deep: bool) -> Dict[str, Any]:
+                         deep: bool, analyze_deps: bool = False,
+                         analyze_openapi: bool = False,
+                         analyze_performance: bool = False) -> Dict[str, Any]:
     """Run all advanced analyzers"""
     results = {}
     
@@ -173,51 +180,57 @@ def run_advanced_analyzers(root: Path, files: list[Path], findings: list[Finding
         results["dataflow"] = dataflow_results.get("metrics", {})
     
     # SQL Injection Analysis
-    if detected.get("sqlalchemy") or any("sql" in content_cache.get(p, "").lower() for p in files[:100]):
+    has_sql = any(
+        re.search(r"\b(select|insert|update|delete)\b", content_cache.get(path, ""), re.IGNORECASE)
+        for path in files[:100]
+    )
+    if deep and (detected.get("sqlalchemy") or has_sql):
         sql_analyzer = SQLInjectionAnalyzer(root, files, content_cache)
         sql_results = sql_analyzer.analyze()
         findings.extend(sql_results.get("findings", []))
         results["sql_injection"] = sql_results.get("metrics", {})
     
     # FastAPI Dependency Analysis
-    if detected.get("fastapi"):
+    if detected.get("fastapi") and (deep or analyze_deps):
         deps_analyzer = FastAPIDependencyAnalyzer(root, files, content_cache)
         deps_results = deps_analyzer.analyze()
         findings.extend(deps_results.get("findings", []))
         results["dependency_graph"] = deps_results.get("graph", {})
     
     # OpenAPI Analysis
-    if detected.get("openapi") or detected.get("fastapi"):
+    if (detected.get("openapi") or detected.get("fastapi")) and (deep or analyze_openapi):
         openapi_analyzer = OpenAPIAnalyzer(root, all_paths, content_cache)
         openapi_results = openapi_analyzer.analyze()
         findings.extend(openapi_results.get("findings", []))
         results["openapi"] = openapi_results.get("analysis", {})
     
     # Pydantic Analysis
-    if detected.get("pydantic"):
+    if detected.get("pydantic") and deep:
         pydantic_analyzer = PydanticAnalyzer(root, files, content_cache)
         pydantic_results = pydantic_analyzer.analyze()
         findings.extend(pydantic_results.get("findings", []))
         results["pydantic"] = pydantic_results.get("metrics", {})
     
     # Async Analysis
-    async_analyzer = AsyncAnalyzer(root, files, content_cache)
-    async_results = async_analyzer.analyze()
-    findings.extend(async_results.get("findings", []))
-    results["async"] = async_results.get("metrics", {})
+    if deep:
+        async_analyzer = AsyncAnalyzer(root, files, content_cache)
+        async_results = async_analyzer.analyze()
+        findings.extend(async_results.get("findings", []))
+        results["async"] = async_results.get("metrics", {})
     
     # Performance Analysis
-    if deep:
+    if deep or analyze_performance:
         perf_analyzer = PerformanceAnalyzer(root, files, content_cache)
         perf_results = perf_analyzer.analyze()
         findings.extend(perf_results.get("findings", []))
         results["performance"] = perf_results.get("metrics", {})
     
     # Architecture Analysis
-    arch_analyzer = ArchitectureAnalyzer(root, files, content_cache)
-    arch_results = arch_analyzer.analyze()
-    findings.extend(arch_results.get("findings", []))
-    results["architecture"] = arch_results.get("metrics", {})
+    if deep:
+        arch_analyzer = ArchitectureAnalyzer(root, files, content_cache)
+        arch_results = arch_analyzer.analyze()
+        findings.extend(arch_results.get("findings", []))
+        results["architecture"] = arch_results.get("metrics", {})
     
     return results
 
@@ -341,6 +354,10 @@ def build_parser():
     p.add_argument("--analyze-deps", action="store_true", help="Analyser le graphe de dépendances FastAPI")
     p.add_argument("--analyze-openapi", action="store_true", help="Analyser le schéma OpenAPI")
     p.add_argument("--analyze-performance", action="store_true", help="Analyser les performances")
+    p.add_argument(
+        "--progress", choices=["auto", "always", "never"], default="auto",
+        help="Animation de progression: auto (terminal uniquement), always ou never",
+    )
     return p
 
 def main() -> int:
@@ -352,31 +369,47 @@ def main() -> int:
         return 2
 
     start = time.perf_counter()
-    all_paths, files = scan_tree(root, SKIP_DIRS)
-    content_cache = read_all(files)
-    detected = detect(root, files, all_paths, content_cache)
+    progress = ProgressUI(args.progress)
+    with progress.phase("Exploration du projet"):
+        all_paths, files = scan_tree(root, SKIP_DIRS)
+        text_paths = [
+            path for path in all_paths
+            if path.suffix.lower() in TEXT_EXTENSIONS or is_dotenv_file(path)
+        ]
+        content_cache = read_all(text_paths)
+    with progress.phase("Détection de la stack"):
+        detected = detect(root, files, all_paths, content_cache)
     findings: list[Finding] = []
     
     # Run advanced analyzers
     advanced_results = {}
     if args.deep or args.analyze_deps or args.analyze_openapi or args.analyze_performance:
-        advanced_results = run_advanced_analyzers(
-            root, files, findings, detected, content_cache, args.deep
-        )
+        with progress.phase("Analyse approfondie"):
+            advanced_results = run_advanced_analyzers(
+                root, files, all_paths, findings, detected, content_cache, args.deep,
+                args.analyze_deps, args.analyze_openapi, args.analyze_performance,
+            )
     
     # Run basic analyzers (from original code)
     from modules.analyzers.basic import BasicAnalyzer
     basic_analyzer = BasicAnalyzer(root, files, all_paths, findings, content_cache, args.deep)
-    metrics = basic_analyzer.analyze()
+    with progress.phase("Qualité, sécurité et structure"):
+        metrics = basic_analyzer.analyze()
     
     # Run external tools
     tools = []
     if not args.no_external:
-        tools = external_tools(root, findings, args.deep, args.tests)
+        with progress.phase("Outils externes"):
+            tools = external_tools(root, findings, args.deep, args.tests)
 
     # Deduplicate findings
     unique = {}
     for f in findings:
+        f.setdefault("source", "FastAPI Doctor")
+        f.setdefault("recommendation", "")
+        f.setdefault("file", None)
+        f.setdefault("line", None)
+        f.setdefault("rule_id", None)
         key = (f.get("severity"), f.get("category"), f.get("title"), f.get("file"), f.get("line"), f.get("detail"), f.get("rule_id"))
         unique[key] = f
     findings = sorted(unique.values(), key=lambda f: (-WEIGHTS.get(f.get("severity", "INFO"), 0), f.get("category", ""), f.get("file", "") or "", f.get("line", 0) or 0))
@@ -401,6 +434,7 @@ def main() -> int:
 
     # Convert report to dict for reporters
     report_dict = asdict(report)
+    progress.summary(report.score, len(findings))
     
     # Generate output
     if args.format == "json":

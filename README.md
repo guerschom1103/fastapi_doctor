@@ -90,6 +90,11 @@ fastapi-doctor --path /path/to/your/project --analyze-openapi
 fastapi-doctor --path /path/to/your/project --analyze-performance
 ```
 
+When run in an interactive terminal, FastAPI Doctor displays an animated phase-by-phase
+progress indicator. Machine-readable output stays clean because progress is written to
+stderr and is disabled automatically when output is redirected. Use `--progress always`
+to force it or `--progress never` to disable it.
+
 ## Configuration
 
 Create a `.fastapi-doctor.toml` file in your project root:

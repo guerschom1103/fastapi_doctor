@@ -126,6 +126,29 @@ class AsyncASTVisitor(ast.NodeVisitor):
     def visit_Call(self, node):
         """Visit function calls."""
         if self.current_function_is_async:
+            dotted_name = ""
+            if isinstance(node.func, ast.Name):
+                dotted_name = node.func.id
+            elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                dotted_name = f"{node.func.value.id}.{node.func.attr}"
+
+            blocking_calls = {"open", "input", "time.sleep", "requests.get", "requests.post"}
+            if dotted_name in blocking_calls:
+                self.sync_in_async += 1
+                self.blocking_calls += 1
+                self.findings.append({
+                    "severity": "MEDIUM",
+                    "category": "Async Performance",
+                    "title": "Blocking I/O in async function",
+                    "detail": f"Blocking call '{dotted_name}' used in an async function.",
+                    "file": rel(self.path, self.root),
+                    "line": node.lineno,
+                    "recommendation": "Use an async alternative or run the blocking call in a thread pool.",
+                    "rule_id": "ASYNC-BLOCKING-IO",
+                })
+                self.generic_visit(node)
+                return
+
             # Check for async function calls without await
             if isinstance(node.func, ast.Attribute):
                 func_name = node.func.attr
@@ -155,10 +178,7 @@ class AsyncASTVisitor(ast.NodeVisitor):
             # Check for blocking I/O calls in async functions
             if isinstance(node.func, ast.Name):
                 func_name = node.func.id
-                blocking_funcs = [
-                    "open", "read", "write", "input", "print",
-                    "sleep", "time", "requests.get", "requests.post"
-                ]
+                blocking_funcs = ["open", "read", "write", "input", "print", "sleep"]
                 
                 if func_name in blocking_funcs or any(f.endswith(func_name) for f in blocking_funcs):
                     self.sync_in_async += 1

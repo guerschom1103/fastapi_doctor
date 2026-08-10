@@ -80,41 +80,42 @@ class DataFlowVisitor(ast.NodeVisitor):
     
     def visit_Call(self, node):
         """Track function calls that might leak sensitive data."""
+        leaked_names = {
+            child.id
+            for arg in node.args
+            for child in ast.walk(arg)
+            if isinstance(child, ast.Name) and child.id in self.sensitive_vars
+        }
         # Check for logging of sensitive variables
         if isinstance(node.func, ast.Attribute):
             if node.func.attr in ["info", "debug", "warning", "error", "critical"]:
-                # Check if any sensitive variables are being logged
-                for arg in node.args:
-                    if isinstance(arg, ast.Name):
-                        if arg.id in self.sensitive_vars:
-                            self.potential_leaks += 1
-                            self.findings.append({
-                                "severity": "HIGH",
-                                "category": "Data Flow",
-                                "title": "Sensitive data potentially logged",
-                                "detail": f"Variable '{arg.id}' appears to contain sensitive data and is being passed to logging function.",
-                                "file": rel(self.path, self.root),
-                                "line": node.lineno,
-                                "recommendation": "Avoid logging sensitive data. Use masking or redaction.",
-                                "rule_id": "DATAFLOW-LOGGING-LEAK"
-                            })
+                for name in leaked_names:
+                    self.potential_leaks += 1
+                    self.findings.append({
+                        "severity": "HIGH",
+                        "category": "Data Flow",
+                        "title": "Sensitive data potentially logged",
+                        "detail": f"Variable '{name}' appears to contain sensitive data and is being passed to logging function.",
+                        "file": rel(self.path, self.root),
+                        "line": node.lineno,
+                        "recommendation": "Avoid logging sensitive data. Use masking or redaction.",
+                        "rule_id": "DATAFLOW-LOGGING-LEAK"
+                    })
         
         # Check for print statements with sensitive data
         elif isinstance(node.func, ast.Name) and node.func.id == "print":
-            for arg in node.args:
-                if isinstance(arg, ast.Name):
-                    if arg.id in self.sensitive_vars:
-                        self.potential_leaks += 1
-                        self.findings.append({
-                            "severity": "MEDIUM",
-                            "category": "Data Flow",
-                            "title": "Sensitive data printed to stdout",
-                            "detail": f"Variable '{arg.id}' appears to contain sensitive data and is being printed.",
-                            "file": rel(self.path, self.root),
-                            "line": node.lineno,
-                            "recommendation": "Remove debug prints or mask sensitive data.",
-                            "rule_id": "DATAFLOW-PRINT-LEAK"
-                        })
+            for name in leaked_names:
+                self.potential_leaks += 1
+                self.findings.append({
+                    "severity": "MEDIUM",
+                    "category": "Data Flow",
+                    "title": "Sensitive data printed to stdout",
+                    "detail": f"Variable '{name}' appears to contain sensitive data and is being printed.",
+                    "file": rel(self.path, self.root),
+                    "line": node.lineno,
+                    "recommendation": "Remove debug prints or mask sensitive data.",
+                    "rule_id": "DATAFLOW-PRINT-LEAK"
+                })
         
         self.generic_visit(node)
     

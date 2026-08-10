@@ -15,6 +15,7 @@ class OpenAPIAnalyzer:
     def __init__(self, root: Path, all_paths: List[Path], content_cache: Dict[Path, str]):
         self.root = root
         self.all_paths = all_paths
+        self.files = [path for path in all_paths if path.suffix in (".py", ".pyi")]
         self.content_cache = content_cache
         self.findings = []
         self.analysis = {

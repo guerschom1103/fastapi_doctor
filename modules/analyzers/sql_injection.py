@@ -84,7 +84,7 @@ class SQLInjectionAnalyzer:
                         "file": rel(path, self.root),
                         "line": i,
                         "recommendation": "Use parameterized queries with SQLAlchemy or database drivers.",
-                        "rule_id": "SQL-FSTRING-INJECTION"
+                        "rule_id": "SQL-INJECTION-FSTRING"
                     })
                 
                 # Check for .format() in SQL
@@ -98,7 +98,7 @@ class SQLInjectionAnalyzer:
                         "file": rel(path, self.root),
                         "line": i,
                         "recommendation": "Use parameterized queries instead of string formatting.",
-                        "rule_id": "SQL-FORMAT-INJECTION"
+                        "rule_id": "SQL-INJECTION-FORMAT"
                     })
     
     def _analyze_ast(self, path: Path, tree: ast.AST, source: str):
@@ -188,7 +188,7 @@ class SQLInjectionVisitor(ast.NodeVisitor):
                     "file": rel(self.path, self.root),
                     "line": line_num,
                     "recommendation": "Review for SQL injection vulnerability. Use parameterized queries.",
-                    "rule_id": "FSTRING-SQL-KEYWORDS"
+                    "rule_id": "SQL-INJECTION-FSTRING-KEYWORDS"
                 })
         
         self.generic_visit(node)
